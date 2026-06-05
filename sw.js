@@ -1,4 +1,4 @@
-const CACHE = 'billsplit-v2';
+const CACHE = 'billsplit-v3';
 const ASSETS = [
   './index.html',
   './manifest.json'
