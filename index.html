@@ -482,6 +482,41 @@
   .modal-confirm:hover { background: rgba(255,92,92,0.2); }
 
 
+
+  .btn-add-discount {
+    display: flex; align-items: center; gap: 5px;
+    background: none; border: 1px solid var(--border2);
+    border-radius: 7px; padding: 5px 11px;
+    color: var(--text2); font-family: 'Sarabun', sans-serif;
+    font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s;
+  }
+  .btn-add-discount:hover { background: var(--red-dim); border-color: rgba(255,92,92,0.3); color: var(--red); }
+  .btn-add-discount svg { width: 12px; height: 12px; }
+
+  .discount-row {
+    display: grid; grid-template-columns: 1fr 140px 28px;
+    gap: 8px; align-items: center; margin-bottom: 8px;
+  }
+  .discount-row input[type="text"] {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px;
+    color: var(--text2); font-family: 'Sarabun', sans-serif;
+    font-size: 15px; outline: none; transition: border-color 0.2s;
+  }
+  .discount-row input[type="text"]:focus { border-color: var(--border2); }
+  .discount-row input[type="number"] {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px;
+    color: var(--red); font-family: 'IBM Plex Mono', monospace;
+    font-size: 15px; font-weight: 500; outline: none; text-align: right;
+    transition: border-color 0.2s; width: 100%;
+  }
+  .discount-row input[type="number"]:focus { border-color: rgba(255,92,92,0.4); }
+  .discount-total {
+    font-size: 14px; color: var(--text2); text-align: right;
+    padding: 4px 0 2px; margin-top: 2px;
+  }
+  .discount-total .discount { font-family: 'IBM Plex Mono', monospace; font-weight: 600; }
   .btn-save-names {
     display: flex;
     align-items: center;
@@ -572,19 +607,28 @@
     <div class="bill-grid">
       <div class="bill-field">
         <label>ค่าอาหารรวม (฿)</label>
-        <input type="number" id="total-food" value="495" oninput="calculate()">
+        <input type="number" id="total-food" placeholder="0" oninput="autoCalc('total-food')">
       </div>
       <div class="bill-field">
         <label>ค่าส่ง (฿)</label>
-        <input type="number" id="delivery" value="56" oninput="calculate()">
+        <input type="number" id="delivery" placeholder="0" oninput="autoCalc('delivery')">
       </div>
-      <div class="bill-field">
-        <label>ส่วนลด (฿)</label>
-        <input type="number" id="discount" class="discount" value="170" oninput="calculate()">
+      <div class="bill-field" style="grid-column: 1 / -1;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <label style="margin-bottom:0">ส่วนลด (฿)</label>
+          <button class="btn-add-discount" onclick="addDiscount()">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/></svg>
+            เพิ่มโค้ด
+          </button>
+        </div>
+        <div id="discount-list"></div>
+        <div class="discount-total" id="discount-total-row" style="display:none">
+          รวมส่วนลด: <span id="discount-total-val" class="discount">฿0</span>
+        </div>
       </div>
       <div class="bill-field">
         <label>ยอดที่ต้องจ่ายจริง (฿)</label>
-        <input type="number" id="final-total" value="382" oninput="calculate()">
+        <input type="number" id="final-total" placeholder="0" oninput="autoCalc('final-total')">
       </div>
     </div>
   </div>
@@ -725,11 +769,80 @@ function fmt(n) {
   return n.toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
+let discounts = [{ id: 1, label: '', amount: 0 }];
+let discountIdCounter = 1;
+
+function getTotalDiscount() {
+  return discounts.reduce((s, d) => s + (d.amount || 0), 0);
+}
+
+function addDiscount() {
+  discountIdCounter++;
+  discounts.push({ id: discountIdCounter, label: '', amount: 0 });
+  renderDiscounts();
+  calculate();
+}
+
+function removeDiscount(id) {
+  if (discounts.length <= 1) { discounts[0].amount = 0; discounts[0].label = ''; renderDiscounts(); calculate(); return; }
+  discounts = discounts.filter(d => d.id !== id);
+  renderDiscounts();
+  calculate();
+}
+
+function updateDiscount(id, field, value) {
+  const d = discounts.find(d => d.id === id);
+  if (d) { d[field] = field === 'amount' ? (parseFloat(value) || 0) : value; calculate(); }
+}
+
+function renderDiscounts() {
+  const list = document.getElementById('discount-list');
+  list.innerHTML = '';
+  discounts.forEach(d => {
+    const row = document.createElement('div');
+    row.className = 'discount-row';
+    row.innerHTML = \`
+      <input type="text" placeholder="ชื่อโค้ด (ไม่บังคับ)" value="\${escHtml(d.label)}"
+        oninput="updateDiscount(\${d.id},'label',this.value)">
+      <input type="number" placeholder="0" value="\${d.amount || ''}"
+        oninput="updateDiscount(\${d.id},'amount',this.value)">
+      <button class="btn-del" onclick="removeDiscount(\${d.id})" title="ลบ">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="3" y1="3" x2="13" y2="13"/><line x1="13" y1="3" x2="3" y2="13"/>
+        </svg>
+      </button>
+    \`;
+    list.appendChild(row);
+  });
+}
+
+function autoCalc(changed) {
+  const f = id => document.getElementById(id);
+  const v = id => parseFloat(f(id).value) || null;
+  const food = v('total-food'), del = v('delivery'), ft = v('final-total');
+  const disc = getTotalDiscount();
+  // Auto-fill the missing field if 2 of the 3 main fields are filled
+  // Rule: finalTotal = food + delivery - discount
+  if (changed !== 'final-total' && food !== null && del !== null) {
+    f('final-total').value = Math.max(0, food + del - disc);
+  } else if (changed !== 'total-food' && ft !== null && del !== null) {
+    f('total-food').value = ft - del + disc;
+  } else if (changed !== 'delivery' && food !== null && ft !== null) {
+    f('delivery').value = ft - food + disc;
+  }
+  calculate();
+}
+
 function calculate() {
   const totalFood = parseFloat(document.getElementById('total-food').value) || 0;
   const delivery  = parseFloat(document.getElementById('delivery').value) || 0;
-  const discount  = parseFloat(document.getElementById('discount').value) || 0;
+  const discount  = getTotalDiscount();
   const finalTotal = parseFloat(document.getElementById('final-total').value) || 0;
+  // Update discount total display
+  const totalDisc = getTotalDiscount();
+  const discTotalRow = document.getElementById('discount-total-row');
+  document.getElementById('discount-total-val').textContent = '฿' + fmt(totalDisc);
+  discTotalRow.style.display = discounts.length > 1 || totalDisc > 0 ? '' : 'none';
 
   document.getElementById('s-delivery').textContent = `฿${fmt(delivery)}`;
   document.getElementById('s-discount').textContent = `-฿${fmt(discount)}`;
@@ -803,8 +916,10 @@ function doReset() {
   closeModal();
   document.getElementById('total-food').value = '';
   document.getElementById('delivery').value = '';
-  document.getElementById('discount').value = '';
   document.getElementById('final-total').value = '';
+  discounts = [{ id: 1, label: '', amount: 0 }];
+  discountIdCounter = 1;
+  renderDiscounts();
   people.forEach(p => { p.order = 0; });
   renderPeople();
   calculate();
@@ -879,17 +994,16 @@ function saveAsFile() {
   URL.revokeObjectURL(a.href);
 }
 
-// Auto-reset bill + orders on every page load
-window.addEventListener('load', () => {
-  document.getElementById('total-food').value = '';
-  document.getElementById('delivery').value = '';
-  document.getElementById('discount').value = '';
-  document.getElementById('final-total').value = '';
-  // orders will be 0 from init, just ensure summary is recalculated
-});
+// (reset handled after init below)
 document.getElementById('reset-modal').addEventListener('click', function(e) {
   if (e.target === this) closeModal();
 });
+
+// Reset bill fields FIRST before anything renders
+document.getElementById('total-food').value = '';
+document.getElementById('delivery').value = '';
+document.getElementById('discount').value = '';
+document.getElementById('final-total').value = '';
 
 // Load saved names from localStorage, no orders
 const savedNames = JSON.parse(localStorage.getItem('billsplit_names') || '[]');
@@ -898,6 +1012,10 @@ if (savedNames.length > 0) {
 } else {
   defaultPeople.forEach(p => addPerson(p.name, p.order));
 }
+
+// Init discount rows
+renderDiscounts();
+calculate();
 </script>
 <script>
 if ('serviceWorker' in navigator) {
